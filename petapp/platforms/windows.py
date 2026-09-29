@@ -3,18 +3,19 @@ import os
 import struct
 import sys
 import winreg
+import winsound
 from ctypes import c_long, c_uint, c_void_p, wintypes
 from pathlib import Path
-from typing import NamedTuple
 
-from .config import APP_NAME, RUN_KEY
+from ..config import APP_NAME
+from ..util import Rect
 
+__all__ = ["Rect", "Bitmap", "STARTUP_LABEL", "ui_font", "work_area_at", "enable_dpi_awareness", "toplevel_options",
+           "make_layered", "update_layered", "play_sound", "already_running", "message_box", "is_startup_enabled",
+           "set_startup"]
 
-class Rect(NamedTuple):
-    left: int
-    top: int
-    right: int
-    bottom: int
+STARTUP_LABEL = "Start with Windows"
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
 def _windows_path(getter):
@@ -32,8 +33,9 @@ def system_dll(name):
     return ctypes.WinDLL(os.fspath(SYSTEM_DIR / name), use_last_error=True)
 
 
-def system_font(name):
-    return FONTS_DIR / name if (FONTS_DIR / name).is_file() else None
+def ui_font(bold=False):
+    names = ("segoeuib.ttf" if bold else "segoeui.ttf", "arial.ttf")
+    return next((FONTS_DIR / n for n in names if (FONTS_DIR / n).is_file()), None)
 
 
 user32, gdi32, kernel32 = system_dll("user32.dll"), system_dll("gdi32.dll"), system_dll("kernel32.dll")
@@ -77,8 +79,14 @@ class Bitmap:
             self.handle = None
 
 
-def make_layered(hwnd):
+def toplevel_options(root):
+    return {}
+
+
+def make_layered(win):
+    hwnd = int(win.wm_frame(), 16)
     user32.SetWindowLongW(hwnd, -20, user32.GetWindowLongW(hwnd, -20) | 0x00080000 | 0x00000080)
+    return hwnd
 
 
 def update_layered(hwnd, bitmap, alpha=255):
@@ -90,6 +98,10 @@ def update_layered(hwnd, bitmap, alpha=255):
     gdi32.SelectObject(memory, previous)
     gdi32.DeleteDC(memory)
     user32.ReleaseDC(None, screen)
+
+
+def play_sound(path):
+    winsound.PlaySound(os.fspath(path), winsound.SND_FILENAME | winsound.SND_ASYNC)
 
 
 def already_running():

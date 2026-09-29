@@ -34,4 +34,4 @@ fx/      heart.png, z.png, bubble.png, crumb_bone.png, crumb_fish.png
   and get scaled to the chosen size.
 - Full alpha transparency is supported, including soft edges and shadows.
 
-Rebuild the .exe after changing art (`build.bat`), because the assets are bundled inside it.
+Rebuild the app after changing art (`packaging/windows/build.bat` or `packaging/linux/build.sh`), because the assets are bundled inside it.

@@ -2,7 +2,7 @@ from PIL import Image, ImageOps, ImageSequence
 
 from .config import DISPLAY_SIZES, resource_path
 from .log import log_error
-from .winapi import Bitmap
+from .platforms import Bitmap
 
 MAX_SIDE, MAX_FILE_BYTES = 2048, 8 * 1024 * 1024
 FALLBACK = {"walk": "idle", "action": "idle", "sleep": "idle", "eat": "action"}

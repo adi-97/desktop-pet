@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from .config import GRAVITY
 from .sprites import Frame
 from .util import clamp
-from .winapi import make_layered, system_font, update_layered
+from .platforms import make_layered, toplevel_options, ui_font, update_layered
 
 OFFSCREEN = -32000
 INK, MUTED, TRACK = (34, 34, 40, 255), (90, 94, 104, 255), (228, 231, 236, 255)
@@ -17,14 +17,13 @@ _fonts = {}
 
 class AlphaWindow:
     def __init__(self, root, cursor=None):
-        self.win = tk.Toplevel(root)
+        self.win = tk.Toplevel(root, **toplevel_options(root))
         self.win.overrideredirect(True)
         self.win.attributes("-topmost", True)
         self.win.geometry(f"1x1+{OFFSCREEN}+{OFFSCREEN}")
         self.win.configure(cursor=cursor or "")
         self.win.update_idletasks()
-        self.hwnd = int(self.win.wm_frame(), 16)
-        make_layered(self.hwnd)
+        self.handle = make_layered(self.win)
         self.frame, self.alpha, self.size, self.pos = None, 255, (1, 1), None
 
     def show(self, frame, alpha=255):
@@ -33,7 +32,7 @@ class AlphaWindow:
             if (frame.width, frame.height) != self.size:
                 self.size = (frame.width, frame.height)
                 self.win.geometry(f"{frame.width}x{frame.height}")
-            update_layered(self.hwnd, frame.bitmap, alpha)
+            update_layered(self.handle, frame.bitmap, alpha)
 
     def move(self, x, y):
         pos = (int(round(x)), int(round(y)))
@@ -50,8 +49,8 @@ class AlphaWindow:
 
 def font(px, bold=False):
     if (px, bold) not in _fonts:
-        paths = [p for p in (system_font("segoeuib.ttf" if bold else "segoeui.ttf"), system_font("arial.ttf")) if p]
-        _fonts[px, bold] = ImageFont.truetype(str(paths[0]), px) if paths else ImageFont.load_default(px)
+        path = ui_font(bold)
+        _fonts[px, bold] = ImageFont.truetype(str(path), px) if path else ImageFont.load_default(px)
     return _fonts[px, bold]
 
 

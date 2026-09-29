@@ -19,7 +19,7 @@ from .services import Notifier, PetStats, SoundPlayer, WeatherService
 from .show import Show
 from .sprites import SpriteLibrary
 from .util import clamp, finite, fmt_clock, fmt_duration, greeting
-from .winapi import already_running, enable_dpi_awareness, is_startup_enabled, message_box, set_startup, work_area_at
+from .platforms import already_running, enable_dpi_awareness, is_startup_enabled, message_box, set_startup, work_area_at
 
 FLAGS = {"gravity": True, "chase": False, "wellness": False, "sound": True}
 
@@ -220,9 +220,9 @@ class App:
         wanted = self.startup_var.get()
         try:
             set_startup(wanted)
-            self.pet.say("I'll be here when you log in!" if wanted else "Okay, I won't start with Windows.", 3000)
+            self.pet.say("I'll be here when you log in!" if wanted else "Okay, I won't start when you log in.", 3000)
         except OSError as e:
-            log_error(f"Start-with-Windows failed: {e!r}")
+            log_error(f"Changing the startup setting failed: {e!r}")
             self.startup_var.set(not wanted)
             self.pet.say("Hmm, I couldn't change the startup setting.", 3000)
 

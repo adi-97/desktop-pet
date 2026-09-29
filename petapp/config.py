@@ -13,9 +13,8 @@ ANIM_MS = {"idle": 110, "sit": 140, "walk": 70, "action": 55, "alert": 35, "eat"
 FRAMESET = {"sit": "idle", "alert": "action", "fall": "action", "drag": "action"}
 TIMED_STATES = ("action", "alert", "eat", "fall", "drag")
 
-DATA_DIR = Path(os.environ.get("APPDATA") or Path.home()) / APP_NAME
+DATA_DIR = Path(os.environ.get("APPDATA") or os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / APP_NAME
 SETTINGS_FILE, LOG_FILE = DATA_DIR / "settings.json", DATA_DIR / "error.log"
-RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 MAX_SETTINGS_BYTES, MAX_LOG_BYTES, MAX_REMINDERS, MAX_REMINDER_TEXT = 256 * 1024, 512 * 1024, 50, 200
 
 GENERIC_CHATTER = ("Don't forget to blink!", "You're doing great today.", "Psst... right-click me for tricks.",
