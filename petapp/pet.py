@@ -14,6 +14,7 @@ class Pet:
         self.x, self.y, self.vx, self.vy, self.hop = float(x), float(y), 0.0, 0.0, 0.0
         self.facing, self.airborne, self.leaving = -1 if friend else 1, False, False
         self.chase_until = self.pounce_ready = self.next_zzz = self.eat_start = self.leave_deadline = self.swim_dy = 0.0
+        self.altitude = 0.5
         self.next_bubble = time.time() + 2
         self.treat = self.run_target = self.drag = self._click = self._frame = None
         self._ignore_release, self._rub = False, [None, 0, [], 0.0]
@@ -84,6 +85,7 @@ class Pet:
         bottom, center = (self.y + self.box[3], self.cx) if anchor else (0, 0)
         self.key, self.spec = key, PETS[key]
         self.sprites = self.app.sprites.pet(self.spec, self.app.size)
+        self.hop = 0.0
         if anchor:
             self.x, self.y = center - (self.box[0] + self.box[2]) / 2, bottom - self.box[3]
             self.keep_on_screen()
@@ -92,7 +94,9 @@ class Pet:
     def set_state(self, state, seconds=None):
         self.state, self.state_until = state, time.time() + seconds if seconds else 0.0
         self.frame_i, self.next_frame = -1, 0.0
-        if state != "alert":
+        if self.spec.flies and state in ("drag", "fall"):
+            self.y, self.hop = self.y - self.hop, 0.0
+        elif state != "alert" and not self.spec.flies:
             self.hop = 0.0
 
     def _ensure(self, state):
@@ -131,6 +135,7 @@ class Pet:
             return
         if not d["moved"]:
             d["moved"], self.airborne = True, False
+            d["oy"] += self.hop
             self.set_state("drag")
         self.x, self.y = e.x_root - d["ox"], e.y_root - d["oy"]
         self.keep_on_screen(self.app.work_area_at(e.x_root, e.y_root))
@@ -240,6 +245,9 @@ class Pet:
             if state != "sleep" and now >= self.next_bubble:
                 self.next_bubble = now + random.uniform(3, 8)
                 app.bubbles(self, random.randint(1, 3))
+        if self.spec.flies and state != "alert":
+            goal = (30 + 80 * self.altitude) * self.unit if state == "walk" else 0.0
+            self.hop += clamp(goal - self.hop, -4 * self.unit, 2.5 * self.unit)
         if state in TIMED_STATES:
             if state == "alert":
                 self.hop = abs(math.sin(now * 13)) * 12 * self.unit
@@ -301,7 +309,7 @@ class Pet:
                 self.chase_until = now + 8
                 return
         if roll < 0.55:
-            self.facing, self.swim_dy = random.choice((-1, 1)), random.choice((-0.8, 0.0, 0.8))
+            self.facing, self.swim_dy, self.altitude = random.choice((-1, 1)), random.choice((-0.8, 0.0, 0.8)), random.random()
             self.set_state("walk", random.uniform(2, 6))
         else:
             self.set_state("idle", random.uniform(2, 6))
@@ -312,7 +320,7 @@ class Pet:
         ox, oy = self.bite_offset(face)
         dy = treat.cy - oy - self.y if self.spec.swims else 0.0
         arrived = self._step_to(treat.cx - ox - self.x, dy, 1.3, area, face)
-        if not (arrived and treat.landed):
+        if not (arrived and treat.landed) or (self.spec.flies and self.hop > self.unit):
             return self._ensure("walk" if not arrived or self.spec.swims else "idle")
         self.eat_start = time.time()
         self.set_state("eat", self.spec.eat_secs)
@@ -359,7 +367,10 @@ class Pet:
             self._walk((sign(dx) or 1) * (1 if chasing else -1), 1.7 if chasing else 1.3, area)
 
     def _animate(self, now):
-        frames = self.sprites.frames[FRAMESET.get(self.state, self.state)][self.facing]
+        name = FRAMESET.get(self.state, self.state)
+        if self.spec.flies and name == "idle" and self.hop > 3 * self.unit:
+            name = "walk"
+        frames = self.sprites.frames[name][self.facing]
         if now >= self.next_frame:
             self.frame_i = (self.frame_i + 1) % len(frames)
             speed = self.app.speed_factor(self) * (3 if self.run_target is not None else 1) if self.state == "walk" else 1

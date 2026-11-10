@@ -4,13 +4,12 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-import winsound
 from dataclasses import dataclass
 
 from . import config
 from .log import log_error
+from .platforms import message_box, play_sound
 from .util import clamp, finite
-from .winapi import message_box
 
 MOODS = ((80, "Over the moon"), (55, "Happy"), (30, "Okay"), (0, "Lonely... pet me!"))
 MOCK_WEATHER = ("Sunny, 24°C", "Partly cloudy, 19°C", "Light rain, 16°C", "Clear skies, 21°C", "Breezy, 18°C")
@@ -22,7 +21,7 @@ class SoundPlayer:
     def play(self, spec, times=1, kind="sound"):
         clips = sorted((config.resource_path("assets") / spec.folder).glob(f"{kind}*.wav"))
         if self.enabled and clips:
-            winsound.PlaySound(str(random.choice(clips)), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            play_sound(random.choice(clips))
 
 
 class Notifier:

@@ -2,6 +2,7 @@ import time
 import tkinter as tk
 
 from .config import BREAK_MIN, DISPLAY_SIZES, FOCUS_MIN, PETS, WELLNESS_MIN
+from .platforms import STARTUP_LABEL
 from .util import fmt_duration
 
 TOGGLES = (("Chase my cursor", "chase"), ("Gravity", "gravity"), (f"Wellness nudges (every {WELLNESS_MIN} min)", "wellness"),
@@ -32,7 +33,7 @@ def build_menu(app):
     for size in DISPLAY_SIZES:
         size_menu.add_radiobutton(label=size, variable=app.size_var, value=size, command=app.set_size)
     menu.add_cascade(label="Size", menu=size_menu)
-    menu.add_checkbutton(label="Start with Windows", variable=app.startup_var, command=app.on_startup_toggle)
+    menu.add_checkbutton(label=STARTUP_LABEL, variable=app.startup_var, command=app.on_startup_toggle)
     menu.add_separator()
     menu.add_command(label="Exit", command=app.quit)
     return menu

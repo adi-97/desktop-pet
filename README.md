@@ -1,72 +1,79 @@
 # Desktop Pet
 
-A small animated pet that lives on your Windows desktop. Choose a **Dalmatian**, an **Orange Cat** or a **Goldfish**. It walks (or swims) around above your other windows, reacts when you click it, eats treats and reminds you about things.
+A small animated pet that lives on your desktop, on Windows or Linux. Choose a **Dalmatian**, an **Orange Cat**, a **Tiger** cub, a **Goldfish** or a **Parrot**. It walks, swims or flies around above your other windows, reacts when you click it, eats treats and reminds you about things.
 
-The pets are pre-rendered 3D-style sprites with soft shadows and full transparency, so only the pet itself shows on screen and there's no box around it.
+The pets are pre-rendered 3D-style sprites with soft fur and feathers, soft shadows and full transparency, so only the pet itself shows on screen and there's no box around it.
 
 ## Features
 
-- **Click** the pet: it barks, meows or blubs, and shows the time and the local weather.
+- **Click** the pet: it barks, meows, roars, blubs or squawks, and shows the time and the local weather.
 - **Pet it** by double-clicking it or moving the mouse back and forth over it. Hearts float up.
 - **Drag and throw** it. With gravity on, it falls and bounces on the taskbar.
 - **Feed a treat**:
   - the dog chews a bone;
   - the cat eats a fish head-first down to the skeleton;
-  - the goldfish chases sinking flakes.
+  - the tiger cub tears into a drumstick;
+  - the goldfish chases sinking flakes;
+  - the parrot flies over and pecks at a pile of seeds.
 - **Put on a show**: the pet runs through its tricks (running, barking, eating).
-- **Reminders**: "What should I remind you to do?" and "In how many minutes?". When one is due, the pet jumps, shows a speech bubble and sends a Windows notification. Reminders survive a restart.
+- **Reminders**: "What should I remind you to do?" and "In how many minutes?". When one is due, the pet jumps, shows a speech bubble and sends a desktop notification. Reminders survive a restart.
 - **Focus timer**: 25 minutes of focus and a 5-minute break, on repeat.
 - **Wellness nudges** every 45 minutes: drink water, stretch.
 - **Hunger and happiness stats**, random chatter, and a sleep mode after 10 minutes without interaction.
 - **Chase the cursor**, and **invite a friend over** for a playdate with another pet.
-- **Small, Medium and Large** sizes, and an option to start with Windows.
+- **Small, Medium and Large** sizes, and an option to start when you log in.
 
 Right-click the pet to reach all of these. **Exit** is at the bottom of that menu.
 
-## Running it
+## Install and run
 
-**Just the app:** download `DesktopPet.exe` and double-click it. You don't need Python.
+| | Windows | Linux |
+|---|---|---|
+| Guide | [docs/windows.md](docs/windows.md) | [docs/linux.md](docs/linux.md) |
+| Ready-made app | `DesktopPet.exe` | `DesktopPet` binary |
+| From source | `python desktop_pet.py` | `python3 desktop_pet.py` |
+| Build it | `packaging\windows\build.bat` | `packaging/linux/build.sh` |
+| Status | Tested | Written but not yet tested on a real Linux machine |
 
-**From source** (Windows, Python 3.10+):
-
-```powershell
-pip install -r requirements.txt
-python desktop_pet.py
-```
-
-**Build the exe yourself:**
-
-```powershell
-build.bat
-```
-
-This creates `dist\DesktopPet.exe` (about 24 MB, with no console window).
+PyInstaller can't cross-compile, so build the Windows app on Windows and the Linux app on Linux.
 
 ## Project layout
 
 ```
-desktop_pet.py      entry point
-petapp/             the app (Tkinter + Pillow + Win32 layered windows)
-assets/             rendered pet frames, treats, effects and sounds (bundled into the exe)
-tools/              dev-only renderers that generate assets/ (numpy)
-build.bat           PyInstaller build command
+desktop_pet.py          entry point
+petapp/                 the app (Tkinter + Pillow), shared by both systems
+  platforms/            everything OS-specific, behind one interface
+    __init__.py         picks the right backend at startup
+    windows.py          Win32: layered windows, mutex, registry, winsound
+    linux.py            X11: ARGB windows / shape masks, lock file, autostart, paplay
+packaging/
+  windows/build.bat     builds dist\DesktopPet.exe
+  linux/build.sh        builds dist/DesktopPet
+docs/                   per-OS install, build and troubleshooting guides
+assets/                 rendered animation strips, treats, effects and sounds (bundled into the app)
+tools/                  dev-only generator for assets/ (numpy)
+  render.py             entry point: writes everything in assets/
+  engine.py             3D-ish shading, fur, animation curves and shared body parts
+  pets/                 one renderer per pet
+  props.py              treats, crumbs and floating effects
+  sounds.py             synthesized voices and eating sounds
 ```
+
+The rest of `petapp/` never imports a backend directly. It goes through `petapp.platforms`, so a new OS only needs one more file there.
 
 ## Changing the art or sounds
 
-Everything in `assets/` is generated by the scripts in `tools/`:
+Everything in `assets/` is generated by `tools/render.py`, which works on either system:
 
-```powershell
+```sh
 pip install -r tools/requirements.txt
-python tools/render_sprites.py            # all pets, treats and effects
-python tools/render_sprites.py goldfish   # one pet
-python tools/render_sounds.py             # barks, meows, bubbles, eating sounds
+python tools/render.py            # all pets, treats, effects and sounds
+python tools/render.py goldfish   # one pet (plus treats and effects)
 ```
 
-You can also drop in your own PNG or GIF frames, or WAV recordings. See [assets/README.md](assets/README.md) for the folder layout. Rebuild the exe afterwards, because the assets are bundled inside it.
+You can also drop in your own PNG or GIF frames, or WAV recordings. See [assets/README.md](assets/README.md) for the folder layout. Rebuild the app afterwards, because the assets are bundled inside it.
 
-## Settings and privacy
+## Privacy
 
-- Settings, stats and pending reminders are saved in `%APPDATA%\DesktopPet\settings.json`.
 - The only network request is the weather lookup, sent to [wttr.in](https://wttr.in). It uses your approximate location from your IP address. If that request fails, the pet shows made-up sample weather instead.
-- "Start with Windows" adds a single entry under `HKCU\...\Run`, and turning it off removes the entry.
+- Settings stay on your machine. The per-OS guides say where they are kept.

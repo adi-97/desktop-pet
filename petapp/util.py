@@ -1,5 +1,13 @@
 import math
 from datetime import datetime
+from typing import NamedTuple
+
+
+class Rect(NamedTuple):
+    left: int
+    top: int
+    right: int
+    bottom: int
 
 
 def clamp(value, lo, hi):

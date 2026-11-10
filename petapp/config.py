@@ -9,13 +9,12 @@ DISPLAY_SIZES = {"Small": 110, "Medium": 150, "Large": 210}
 WEATHER_CITY, USE_MOCK_WEATHER, WEATHER_CACHE_SEC = "", False, 10 * 60
 SLEEP_AFTER_SEC, FOCUS_MIN, BREAK_MIN, WELLNESS_MIN, PLAYDATE_SEC = 10 * 60, 25, 5, 45, 60
 FOOD_DECAY_PER_MIN, HAPPY_DECAY_PER_MIN = 1 / 3, 1 / 4
-ANIM_MS = {"idle": 110, "sit": 140, "walk": 70, "action": 55, "alert": 35, "eat": 85, "sleep": 250, "fall": 60, "drag": 60}
+ANIM_MS = {"idle": 110, "sit": 140, "walk": 55, "action": 55, "alert": 35, "eat": 85, "sleep": 250, "fall": 60, "drag": 60}
 FRAMESET = {"sit": "idle", "alert": "action", "fall": "action", "drag": "action"}
 TIMED_STATES = ("action", "alert", "eat", "fall", "drag")
 
-DATA_DIR = Path(os.environ.get("APPDATA") or Path.home()) / APP_NAME
+DATA_DIR = Path(os.environ.get("APPDATA") or os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / APP_NAME
 SETTINGS_FILE, LOG_FILE = DATA_DIR / "settings.json", DATA_DIR / "error.log"
-RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 MAX_SETTINGS_BYTES, MAX_LOG_BYTES, MAX_REMINDERS, MAX_REMINDER_TEXT = 256 * 1024, 512 * 1024, 50, 200
 
 GENERIC_CHATTER = ("Don't forget to blink!", "You're doing great today.", "Psst... right-click me for tricks.",
@@ -40,6 +39,7 @@ class PetSpec:
     eat_line: str
     crumb: str = None
     swims: bool = False
+    flies: bool = False
 
     @property
     def folder(self):
@@ -60,6 +60,16 @@ PETS = {spec.name: spec for spec in (
             ("Goldfish can recognise their owner's face!", "My memory lasts months, not 3 seconds. Rude.",
              "Goldfish can see ultraviolet light.", "Goldfish don't have a stomach!", "A group of fish is a school. I'm homeschooled."),
             (0.9, 0.58), 2.6, "*gulp* Tasty flakes!", swims=True),
+    PetSpec("Tiger", "Rawr!", "meat", "a drumstick", ("*rumbly chuff*", "Prrrff! (that's tiger for purr)", "Belly rubs? For me?"),
+            ("Tigers are the biggest cats in the world.", "No two tigers have the same stripes.",
+             "My skin is striped too, not just my fur!", "Tigers love to swim. Most cats don't.",
+             "A tiger's roar can be heard 3 km away. Mine is... smaller."),
+            (0.82, 0.94), 3.8, "*licks whiskers* Rawrsome.", "fx/crumb_meat"),
+    PetSpec("Parrot", "Squawk!", "seeds", "some seeds", ("*happy squawk*", "Pretty bird! Pretty bird!", "*fluffs up feathers*"),
+            ("Parrots can learn hundreds of words.", "My beak can crack nuts you'd need a hammer for.",
+             "Parrots have two toes forward and two back.", "Some parrots live longer than 60 years!",
+             "Parrots can see ultraviolet colours."),
+            (0.74, 0.92), 3.0, "*crunch crunch* Pretty tasty!", "fx/crumb_seeds", flies=True),
 )}
 
 

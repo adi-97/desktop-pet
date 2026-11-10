@@ -2,33 +2,47 @@ from PIL import Image, ImageOps, ImageSequence
 
 from .config import DISPLAY_SIZES, resource_path
 from .log import log_error
-from .winapi import Bitmap
+from .platforms import Bitmap
 
-MAX_SIDE, MAX_FILE_BYTES = 2048, 8 * 1024 * 1024
+MAX_SIDE, MAX_FILE_BYTES, MAX_FRAMES = 2048, 8 * 1024 * 1024, 240
 FALLBACK = {"walk": "idle", "action": "idle", "sleep": "idle", "eat": "action"}
+
+
+def strip_count(image):
+    try:
+        count = int(image.info.get("frames", 1))
+    except (TypeError, ValueError):
+        return 1
+    return count if 1 <= count <= MAX_FRAMES and image.width % count == 0 else 1
 
 
 def open_image(path):
     if path.stat().st_size > MAX_FILE_BYTES:
         raise OSError(f"{path.name} is larger than {MAX_FILE_BYTES} bytes")
     image = Image.open(path, formats=("PNG", "GIF"))
-    if max(image.size) > MAX_SIDE:
+    if max(image.width // strip_count(image), image.height) > MAX_SIDE:
         image.close()
-        raise OSError(f"{path.name} is larger than {MAX_SIDE}px")
+        raise OSError(f"{path.name} has frames larger than {MAX_SIDE}px")
     return image
 
 
+def load_frames(path):
+    with open_image(path) as image:
+        if getattr(image, "n_frames", 1) > 1:
+            return [f.convert("RGBA") for _, f in zip(range(MAX_FRAMES), ImageSequence.Iterator(image))]
+        count, sheet = strip_count(image), image.convert("RGBA")
+    w = sheet.width // count
+    return [sheet.crop((i * w, 0, i * w + w, sheet.height)) for i in range(count)]
+
+
 def read_frames(folder, state):
-    paths = sorted(p for p in (folder / state).glob("*.*") if p.suffix.lower() in (".png", ".gif")) if (folder / state).is_dir() else []
-    paths = paths or [p for p in [folder / f"{state}.gif"] if p.is_file()]
-    images = []
-    for path in paths:
-        try:
-            with open_image(path) as image:
-                images += [f.convert("RGBA") for _, f in zip(range(240), ImageSequence.Iterator(image))]
-        except (OSError, Image.DecompressionBombError) as e:
-            log_error(f"Could not load {path}: {e}")
-    return images
+    for path in (folder / f"{state}.png", folder / f"{state}.gif"):
+        if path.is_file():
+            try:
+                return load_frames(path)
+            except (OSError, Image.DecompressionBombError) as e:
+                log_error(f"Could not load {path}: {e}")
+    return []
 
 
 def scale(image, factor):
@@ -77,18 +91,15 @@ class SpriteLibrary:
     def pet(self, spec, size):
         return self._cached((spec.folder, size), lambda: self._load_pet(spec.folder, self.pixels(size)))
 
-    def image(self, name, size, fraction):
+    def strip(self, name, size, fraction):
         def build():
-            with open_image(resource_path(f"assets/{name}.png")) as source:
-                image = source.convert("RGBA")
-            return Frame(scale(image, self.pixels(size) * fraction / image.width))
+            images = load_frames(resource_path(f"assets/{name}.png"))
+            factor = self.pixels(size) * fraction / images[0].width
+            return [Frame(scale(image, factor)) for image in images]
         return self._cached((name, size, round(fraction, 2)), build)
 
-    def treat_frames(self, kind, size, fraction):
-        frames = [self.image(f"treats/{kind}", size, fraction)]
-        while len(frames) < 12 and resource_path(f"assets/treats/{kind}_{len(frames)}.png").is_file():
-            frames.append(self.image(f"treats/{kind}_{len(frames)}", size, fraction))
-        return frames
+    def image(self, name, size, fraction):
+        return self.strip(name, size, fraction)[0]
 
     def _load_pet(self, folder_name, target):
         folder = resource_path("assets") / folder_name

@@ -19,7 +19,7 @@ from .services import Notifier, PetStats, SoundPlayer, WeatherService
 from .show import Show
 from .sprites import SpriteLibrary
 from .util import clamp, finite, fmt_clock, fmt_duration, greeting
-from .winapi import already_running, enable_dpi_awareness, is_startup_enabled, message_box, set_startup, work_area_at
+from .platforms import already_running, enable_dpi_awareness, is_startup_enabled, message_box, set_startup, work_area_at
 
 FLAGS = {"gravity": True, "chase": False, "wellness": False, "sound": True}
 
@@ -220,9 +220,9 @@ class App:
         wanted = self.startup_var.get()
         try:
             set_startup(wanted)
-            self.pet.say("I'll be here when you log in!" if wanted else "Okay, I won't start with Windows.", 3000)
+            self.pet.say("I'll be here when you log in!" if wanted else "Okay, I won't start when you log in.", 3000)
         except OSError as e:
-            log_error(f"Start-with-Windows failed: {e!r}")
+            log_error(f"Changing the startup setting failed: {e!r}")
             self.startup_var.set(not wanted)
             self.pet.say("Hmm, I couldn't change the startup setting.", 3000)
 
@@ -400,7 +400,7 @@ class App:
         if self.treat or (self.stats_for(pet).food >= 95 and not force):
             return pet.say("One treat at a time!" if self.treat else "I'm stuffed! Maybe later.", 2500)
         area = self.work_area_at(pet.cx, pet.cy)
-        frames = self.sprites.treat_frames(pet.spec.treat, self.size, 0.36)
+        frames = self.sprites.strip(f"treats/{pet.spec.treat}", self.size, 0.36)
         w, h = frames[0].width, frames[0].height
         x = clamp(pet.cx + random.choice((-1, 1)) * random.uniform(0.8, 2.2) * pet.body_w - w / 2, area.left, area.right - w)
         top = max(area.top, pet.top - (160 if pet.spec.swims else 200) * pet.unit)
