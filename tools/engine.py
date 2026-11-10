@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFilter
 SIZE = 256
 SS = 3
 GROUND = 246
-FRAMES = {"idle": 16, "walk": 12, "action": 14, "sleep": 12, "eat": 12}
+FRAMES = {"idle": 24, "walk": 16, "action": 14, "sleep": 12, "eat": 12}
 
 
 def unit(v):
@@ -38,9 +38,24 @@ class Mat:
     cuts: tuple = ()
     cut_rim: str = None
     rim_width: float = 3.0
+    fur: float = 0.0
 
     def but(self, **kw):
         return replace(self, **kw)
+
+
+def strands(size=SIZE * SS, length=9, seed=5):
+    rng = np.random.default_rng(seed)
+    raw = rng.random((size, size))
+    streak = sum(np.roll(raw, (s, s // 3), axis=(0, 1)) for s in range(length)) / length
+    return np.clip(0.5 + (streak - 0.5) * 3.2, 0, 1)
+
+
+NOISE = strands()
+
+
+def plush(color, layers=(), fur=1.0, **kw):
+    return Mat(color, layers=layers, fur=fur, **{**dict(spec=0.035, shine=8, ambient=0.46, wrap=0.62, rim=0.2), **kw})
 
 
 def normalize(nx, ny, nz):
@@ -186,6 +201,9 @@ class Canvas:
         edge = bite_edge(x, y, mat.cuts) if mat.cuts else None
         if edge is not None:
             mask = mask & (edge > 0)
+        noise = NOISE[j0:j1, i0:i1] if mat.fur else None
+        if mat.fur:
+            mask = mask & (n[..., 2] > mat.fur * 0.32 * noise)
         if not mask.any():
             return
         sl = (slice(j0, j1), slice(i0, i1))
@@ -195,6 +213,8 @@ class Canvas:
         for color, fn in mat.layers:
             w = np.clip(np.asarray(fn(x, y), float), 0, 1)[..., None]
             base = base * (1 - w) + rgb(color) * w
+        if mat.fur:
+            base = base * (1 + mat.fur * 0.22 * (noise - 0.5))[..., None]
         if edge is not None and mat.cut_rim:
             w = np.clip(1 - edge / mat.rim_width, 0, 1)[..., None]
             base = base * (1 - w) + rgb(mat.cut_rim) * w
@@ -250,34 +270,68 @@ class Xf:
     def k(self, v):
         return v * (self.sx + self.sy) / 2
 
+    def frame(self, f):
+        return Head(*self.p(f.cx, f.cy), f.angle)
 
-def spots_fn(spots):
+
+def spots_fn(spots, ragged=0.0):
     def fn(x, y):
         w = np.zeros(x.shape)
         for sx, sy, r, sq in spots:
-            w = np.maximum(w, ((x - sx) / r) ** 2 + ((y - sy) / (r * sq)) ** 2 < 1)
+            a = np.arctan2(y - sy, x - sx)
+            rr = r * (1 + ragged * (0.6 * np.sin(3 * a + sx) + 0.4 * np.sin(5 * a + sy)))
+            w = np.maximum(w, ((x - sx) / rr) ** 2 + ((y - sy) / (rr * sq)) ** 2 < 1)
         return w
     return fn
 
 
+def ease(x):
+    x = min(max(x, 0.0), 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def pulse(t, start, end):
+    return math.sin(math.pi * ease((t - start) / (end - start))) if start <= t <= end else 0.0
+
+
+def blink_at(t, count, frame):
+    return {frame - 1: 0.55, frame: 1.0, frame + 1: 0.55}.get(round(t * count), 0.0)
+
+
+def jump(t):
+    if t < 0.18:
+        return 0.0, 1 - 0.13 * ease(t / 0.18)
+    if t < 0.78:
+        u = (t - 0.18) / 0.6
+        return math.sin(math.pi * u), 1 + 0.12 * abs(math.cos(math.pi * u))
+    return 0.0, 1 - 0.15 * (1 - (t - 0.78) / 0.22) ** 1.6
+
+
 def motion(state, t):
     tau = 2 * math.pi * t
-    m = dict(bob=0.0, breath=math.sin(tau), tail=0.22 * math.sin(2 * tau), head=1.4 * math.sin(tau),
-             legs=None, mouth=0.0, blink=0.0, sx=1.0, sy=1.0, lift=0.0, tuck=0.0, phase=tau)
+    m = dict(bob=0.0, breath=math.sin(tau), tail=0.22 * math.sin(2 * tau), head=1.4 * math.sin(tau), tilt=0.0,
+             ear=0.0, legs=None, mouth=0.0, blink=0.0, sx=1.0, sy=1.0, lift=0.0, tuck=0.0, phase=tau)
     if state == "idle":
-        frame = round(t * FRAMES["idle"])
-        m["blink"] = {12: 0.55, 13: 1.0, 14: 0.55}.get(frame, 0.0)
+        breath = math.sin(2 * tau)
+        m.update(blink=blink_at(t, FRAMES["idle"], 19), sy=1 + 0.012 * breath, sx=1 - 0.006 * breath,
+                 head=1.2 * math.sin(tau), tilt=-0.07 * pulse(t, 0.25, 0.7) + 0.04 * pulse(t, 0.72, 0.95),
+                 tail=0.16 * math.sin(2 * tau) + 0.3 * pulse(t, 0.05, 0.22) * math.sin(6 * tau),
+                 ear=0.3 * pulse(t, 0.55, 0.62) - 0.15 * pulse(t, 0.62, 0.7))
     elif state == "walk":
-        m.update(bob=2.2 * math.cos(2 * tau), tail=0.35 * math.sin(2 * tau), head=1.2 * math.cos(2 * tau), legs=tau)
+        m.update(bob=2.0 * math.cos(2 * tau), tail=0.3 * math.sin(tau) + 0.08 * math.sin(2 * tau),
+                 head=1.2 * math.cos(2 * tau + 0.7), tilt=0.025 * math.sin(2 * tau), ear=0.14 * math.sin(2 * tau - 1.1),
+                 legs=tau)
     elif state == "action":
-        h = math.sin(math.pi * t)
-        sy = 0.9 + 0.18 * h
-        m.update(lift=32 * h, sy=sy, sx=1 / math.sqrt(sy), tail=0.55 * math.sin(4 * tau),
-                 mouth=1.0 if 0.1 < t < 0.85 else 0.0, tuck=min(1.0, 2.2 * h), head=-2 * h)
+        h, sy = jump(t)
+        m.update(lift=36 * h, sy=sy, sx=1 / math.sqrt(sy), tail=0.55 * math.sin(4 * tau),
+                 mouth=1.0 if 0.18 < t < 0.85 else 0.0, tuck=min(1.0, 1.8 * h), head=-2 * h, tilt=-0.08 * h,
+                 ear=0.55 * h - 0.25 * pulse(t, 0.78, 1.0))
+    elif state == "sleep":
+        m.update(ear=0.25 * pulse(t, 0.5, 0.6), tail=0.12 * pulse(t, 0.7, 0.9))
     elif state == "eat":
         chew = math.sin(3 * tau)
         m.update(eat=True, jaw=max(0.0, chew), nod=2.5 * chew, tug=4.5 * max(0.0, -chew),
-                 tail=0.4 * math.sin(2 * tau), head=0.0)
+                 tail=0.45 * math.sin(2 * tau), head=0.0, ear=0.1 * chew)
     return m
 
 
@@ -294,34 +348,62 @@ class Head:
         return dx * self.c + dy * self.s, -dx * self.s + dy * self.c
 
 
-def leg(cv, xf, hip, phase, m, mat, paw, radii=(12.5, 10.0), paw_r=(13.0, 8.5), reach=0.42):
+def leg(cv, xf, hip, phase, m, mat, paw, radii=(12.5, 10.0), paw_r=(13.0, 8.5), reach=0.42, knee=1, toes=None):
     hx, hy = hip
     if m["legs"] is not None:
         angle = reach * math.sin(m["legs"] + phase)
-        lift = 9 * max(0.0, math.cos(m["legs"] + phase))
-        foot_y = GROUND - 9 - lift
+        raised = max(0.0, math.cos(m["legs"] + phase)) ** 1.4
+        foot_y = GROUND - 9 - 12 * raised
         foot_x = hx + (foot_y - hy) * math.tan(angle)
+        bend = 2 + 9 * raised
     else:
-        foot_y = GROUND - 9 - 22 * m["tuck"]
-        foot_x = hx - 7 * m["tuck"]
+        raised = m["tuck"]
+        foot_y = GROUND - 9 - 22 * raised
+        foot_x = hx - 7 * raised
+        bend = 2 + 10 * raised
     hy += m["bob"]
-    cv.draw(Capsule(xf.p(hx, hy), xf.p(foot_x, foot_y), xf.k(radii[0]), xf.k(radii[1])), mat)
-    cv.draw(Ellipsoid(xf.p(foot_x + 4, foot_y + 2), xf.r(*paw_r)), paw)
+    joint = ((hx + foot_x) / 2 + knee * bend, (hy + foot_y) / 2)
+    mid = (radii[0] + radii[1]) / 2
+    cv.draw(Capsule(xf.p(hx, hy), xf.p(*joint), xf.k(radii[0]), xf.k(mid)), mat)
+    cv.draw(Capsule(xf.p(*joint), xf.p(foot_x, foot_y), xf.k(mid), xf.k(radii[1])), mat)
+    cv.draw(Ellipsoid(xf.p(foot_x + 4, foot_y + 2), xf.r(*paw_r), rot=-knee * 0.45 * raised), paw)
+    if toes and raised < 0.3:
+        for dx in (paw_r[0] * 0.25, paw_r[0] * 0.6):
+            cv.draw(Capsule(xf.p(foot_x + 4 + dx, foot_y + 2 + paw_r[1] * 0.1), xf.p(foot_x + 5 + dx, foot_y + 2 + paw_r[1] * 0.85),
+                            xf.k(0.7), xf.k(0.5)), Mat(toes, cast=0, ambient=0.8))
 
 
-def eye(cv, xf, c, r, m, iris=None, pupil_r=None):
+def shadow(m, cx, rx, ry, alpha):
+    fade = max(0.35, 1 - m["lift"] / 70)
+    return cx, GROUND + 1, rx * fade, ry, alpha * fade
+
+
+def eye(cv, xf, c, r, m, iris=None, pupil_r=None, lid="#2a1d18", cover=None, ring=1.14, glow_k=0.6):
     x, y = c
     if m["blink"] >= 0.99 or m.get("closed"):
-        cv.draw(Capsule(xf.p(x - r[0] * 1.1, y + 1), xf.p(x + r[0] * 1.1, y + 2), xf.k(1.9)), Mat("#2a1d18", cast=0))
+        pts = [xf.p(x + r[0] * 1.1 * u, y + 2.5 * (1 - u * u)) for u in (-1, -0.5, 0, 0.5, 1)]
+        for a, b in zip(pts, pts[1:]):
+            cv.draw(Capsule(a, b, xf.k(1.6)), Mat(lid, cast=0))
         return
     ry = r[1] * (1 - 0.75 * m["blink"])
-    glossy = Mat("#121212", spec=0.9, shine=70, ambient=0.7, rim=0.05, cast=0.12)
+    cv.draw(Ellipsoid(xf.p(x, y + 0.4), xf.r(r[0] * ring, ry * (ring - 0.02) + 0.6)), Mat(lid, spec=0.1, cast=0.25))
+    glossy = Mat("#0d0b0a", spec=0.9, shine=70, ambient=0.7, rim=0.05, cast=0)
     if iris:
-        cv.draw(Ellipsoid(xf.p(x, y), xf.r(r[0], ry)), Mat(iris, spec=0.7, shine=50, ambient=0.6, cast=0.12))
-        cv.draw(Ellipsoid(xf.p(x + r[0] * 0.2, y), xf.r(pupil_r[0], pupil_r[1] * (ry / r[1]))), glossy.but(cast=0))
+        (cx, cy), (rx, rr) = xf.p(x, y), xf.r(r[0], ry)
+        ring = lambda px, py: np.clip((np.hypot((px - cx) / rx, (py - cy) / rr) - 0.6) / 0.4, 0, 1) * 0.75
+        glow = lambda px, py: np.clip(1 - np.hypot((px - cx - rx * 0.25) / rx, (py - cy - rr * 0.45) / rr) * 1.6, 0, 1) * glow_k
+        cv.draw(Ellipsoid(xf.p(x, y), xf.r(r[0], ry)), Mat(iris, layers=(("#ffffff", glow), ("#1a120c", ring)),
+                                                          spec=0.7, shine=50, ambient=0.62, cast=0))
+        cv.draw(Ellipsoid(xf.p(x + r[0] * 0.12, y), xf.r(pupil_r[0], pupil_r[1] * (ry / r[1]))), glossy)
     else:
         cv.draw(Ellipsoid(xf.p(x, y), xf.r(r[0], ry)), glossy)
     if ry > 3:
         shine = Mat("#ffffff", ambient=1, wrap=0, rim=0, spec=0, cast=0)
-        cv.draw(Ellipsoid(xf.p(x - r[0] * 0.35, y - ry * 0.4), xf.r(r[0] * 0.34, r[0] * 0.34)), shine)
-        cv.draw(Ellipsoid(xf.p(x + r[0] * 0.3, y + ry * 0.35), xf.r(r[0] * 0.16, r[0] * 0.16)), shine.but(opacity=0.8))
+        cv.draw(Ellipsoid(xf.p(x - r[0] * 0.32, y - ry * 0.38), xf.r(r[0] * 0.36, r[0] * 0.36)), shine)
+        cv.draw(Ellipsoid(xf.p(x + r[0] * 0.34, y + ry * 0.36), xf.r(r[0] * 0.17, r[0] * 0.17)), shine.but(opacity=0.85))
+    if cover:
+        top, half_w, half_h = y - ry * 1.32, r[0] * 1.6, ry * 0.78
+        cv.draw(Ellipsoid(xf.p(x, top), xf.r(half_w, half_h)), Mat(cover, spec=0.03, ambient=0.5, wrap=0.6, cast=0))
+        pts = [xf.p(x + half_w * u, top + half_h * math.sqrt(max(0.0, 1 - u * u))) for u in (-0.62, -0.31, 0, 0.31, 0.62)]
+        for a, b in zip(pts, pts[1:]):
+            cv.draw(Capsule(a, b, xf.k(0.9)), Mat(lid, cast=0))

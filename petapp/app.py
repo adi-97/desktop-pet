@@ -400,7 +400,7 @@ class App:
         if self.treat or (self.stats_for(pet).food >= 95 and not force):
             return pet.say("One treat at a time!" if self.treat else "I'm stuffed! Maybe later.", 2500)
         area = self.work_area_at(pet.cx, pet.cy)
-        frames = self.sprites.treat_frames(pet.spec.treat, self.size, 0.36)
+        frames = self.sprites.strip(f"treats/{pet.spec.treat}", self.size, 0.36)
         w, h = frames[0].width, frames[0].height
         x = clamp(pet.cx + random.choice((-1, 1)) * random.uniform(0.8, 2.2) * pet.body_w - w / 2, area.left, area.right - w)
         top = max(area.top, pet.top - (160 if pet.spec.swims else 200) * pet.unit)
